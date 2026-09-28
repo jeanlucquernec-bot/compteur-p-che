@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>FFPS – Compteur 5 pêcheurs</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111;background:#fff}
+*{box-sizing:border-box} body{margin:0;padding:12px;max-width:900px;margin:auto}
+header{display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:12px}
+small,.muted{color:#666}.total{text-align:right}.total b{display:block;font-size:34px}
+.card{border:1px solid #ccc;border-radius:14px;padding:12px;margin-bottom:12px;background:#fafafa}
+input{font-size:16px;width:100%;padding:10px;border:1px solid #bbb;border-radius:9px;background:#fff}
+.names,.posts{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+label{text-align:center;font-size:12px;font-weight:700}.names input{text-align:center;padding:8px 3px}
+button{font:inherit;touch-action:manipulation}.primary{width:100%;min-height:52px;border:0;border-radius:11px;background:#1769aa;color:#fff;font-weight:800;margin-top:10px}
+.post{min-width:0;text-align:center;border:1px solid #bbb;border-radius:12px;padding:6px;background:#fff}.post.center{border:2px solid #1769aa;background:#eef6fc}
+.postno{font-size:11px;font-weight:800;color:#666}.pname{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.count{font-size:46px;line-height:1;font-weight:900;margin:10px 0}
+.plus{width:100%;min-height:82px;border:0;border-radius:12px;background:#1769aa;color:white;font-size:30px;font-weight:900}
+.minus{width:100%;min-height:42px;margin-top:5px;border:1px solid #aaa;border-radius:9px;background:white;font-size:18px;font-weight:800}.minus:disabled{opacity:.25}
+.operator{text-align:center;font-size:12px;font-weight:700;color:#666;margin-top:10px}
+.feedback{text-align:center;font-weight:700;padding:10px;border-radius:9px;background:#f3f3f3;margin:10px 0}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1;min-height:46px;border:1px solid #aaa;border-radius:10px;background:#fff;font-weight:700}
+.hidden{display:none}.rows>div{display:grid;grid-template-columns:60px 1fr auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid #ddd}.rows b{font-size:24px}
+.history{max-height:260px;overflow:auto;background:#f5f5f5;border-radius:9px;padding:8px}.history div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #ddd;font-size:13px}
+.badge{border:1px solid #bbb;border-radius:999px;padding:4px 8px;font-size:11px;color:#555}
+@media(max-width:520px){body{padding:8px}.posts,.names{gap:4px}.post{padding:4px}.count{font-size:38px}.plus{min-height:76px}.pname{font-size:10px}.postno{font-size:9px}.names input{font-size:12px;padding:7px 2px}}
+</style>
+</head>
+<body>
+<header>
+ <div><b>Comptage de la manche</b><div class="muted">Postes fixes • opérateur derrière le poste 3</div></div>
+ <div class="total"><small>TOTAL PRISES</small><b id="total">0</b></div>
+</header>
+
+<section id="setup" class="card">
+ <b>Préparation de la manche</b>
+ <div style="margin-top:8px"><input id="eventName" maxlength="60" value="Manche 1" aria-label="Nom de la manche"></div>
+ <div id="nameInputs" class="names" style="margin-top:10px"></div>
+ <button id="startBtn" class="primary">Démarrer la manche</button>
+</section>
+
+<section id="match" class="hidden">
+ <div class="card">
+  <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px"><b id="matchTitle">Manche</b><span class="badge">HORS LIGNE</span></div>
+  <div id="posts" class="posts"></div>
+  <div class="operator">👤 OPÉRATEUR ↑ POSTE 3</div>
+ </div>
+ <div id="feedback" class="feedback" aria-live="polite">Prêt pour le comptage</div>
+ <div class="actions"><button id="undoBtn">↶ Annuler dernière action</button><button id="resultsBtn">Résultats / historique</button></div>
+</section>
+
+<section id="results" class="card hidden">
+ <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>Résultats de la manche</b><button id="closeResults">Retour</button></div>
+ <div id="resultRows" class="rows"></div>
+ <p><b>Chronologie</b></p><div id="historyRows" class="history"></div>
+ <button id="finishBtn" class="primary">Terminer / nouvelle manche</button>
+</section>
+
+<script>
+const KEY="ffps-counter-v1";
+let state={active:false,title:"Manche 1",names:["Pêcheur 1","Pêcheur 2","Pêcheur 3","Pêcheur 4","Pêcheur 5"],counts:[0,0,0,0,0],history:[]};
+try{const saved=JSON.parse(localStorage.getItem(KEY));if(saved&&saved.names&&saved.counts)state=saved}catch(e){}
+const $=s=>document.querySelector(s), setup=$("#setup"),match=$("#match"),results=$("#results");
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function now(){return new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+function buildSetup(){
+ $("#eventName").value=state.title;
+ $("#nameInputs").innerHTML=state.names.map((n,i)=>`<label>POSTE ${i+1}<input data-name="${i}" maxlength="18" value="${esc(n)}"></label>`).join("");
+}
+function buildPosts(){
+ $("#posts").innerHTML=state.names.map((n,i)=>`<div class="post ${i===2?"center":""}"><div class="postno">POSTE ${i+1}</div><div class="pname">${esc(n)}</div><div class="count" data-count="${i}">${state.counts[i]}</div><button class="plus" data-add="${i}">+1</button><button class="minus" data-sub="${i}" ${state.counts[i]===0?"disabled":""}>−1</button></div>`).join("");
+ document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>change(+b.dataset.add,1));
+ document.querySelectorAll("[data-sub]").forEach(b=>b.onclick=()=>change(+b.dataset.sub,-1));
+}
+function render(){
+ $("#total").textContent=state.counts.reduce((a,b)=>a+b,0);
+ if(state.active){setup.classList.add("hidden");match.classList.remove("hidden");$("#matchTitle").textContent=state.title;buildPosts()}
+ else{setup.classList.remove("hidden");match.classList.add("hidden");buildSetup()}
+ $("#undoBtn").disabled=!state.history.length;
+ save();
+}
+function change(i,d){
+ if(d<0&&state.counts[i]===0)return;
+ state.counts[i]+=d; state.history.push({i,d,t:now()});
+ $("#feedback").textContent=d>0?`✓ Prise validée — Poste ${i+1} — ${state.names[i]} — Total : ${state.counts[i]}`:`Correction — Poste ${i+1} — ${state.names[i]} — Total : ${state.counts[i]}`;
+ render();
+}
+$("#startBtn").onclick=()=>{
+ state.title=$("#eventName").value.trim()||"Manche";
+ document.querySelectorAll("[data-name]").forEach((e,i)=>state.names[i]=e.value.trim()||`Pêcheur ${i+1}`);
+ state.active=true; render();
+};
+$("#undoBtn").onclick=()=>{const h=state.history.pop();if(!h)return;state.counts[h.i]=Math.max(0,state.counts[h.i]-h.d);$("#feedback").textContent=`Dernière action annulée — Poste ${h.i+1}`;render()};
+$("#resultsBtn").onclick=()=>{
+ $("#resultRows").innerHTML=state.names.map((n,i)=>`<div><span>POSTE ${i+1}</span><span>${esc(n)}</span><b>${state.counts[i]}</b></div>`).join("");
+ $("#historyRows").innerHTML=state.history.length?state.history.map(h=>`<div><span>${h.d>0?"Prise":"Correction"} • Poste ${h.i+1} • ${esc(state.names[h.i])}</span><span>${h.t}</span></div>`).join(""):"Aucune action enregistrée.";
+ match.classList.add("hidden");results.classList.remove("hidden");
+};
+$("#closeResults").onclick=()=>{results.classList.add("hidden");match.classList.remove("hidden")};
+$("#finishBtn").onclick=()=>{if(!confirm("Terminer cette manche et préparer une nouvelle manche ?"))return;state={active:false,title:"Manche 1",names:["Pêcheur 1","Pêcheur 2","Pêcheur 3","Pêcheur 4","Pêcheur 5"],counts:[0,0,0,0,0],history:[]};results.classList.add("hidden");render()};
+if("serviceWorker" in navigator) addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+buildSetup();render();
+</script>
+</body></html>

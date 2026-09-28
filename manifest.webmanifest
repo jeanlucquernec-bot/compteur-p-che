@@ -1,0 +1,9 @@
+{
+  "name": "FFPS – Compteur 5 pêcheurs",
+  "short_name": "Compteur FFPS",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1769aa",
+  "description": "Compteur hors ligne pour cinq pêcheurs, postes fixes."
+}
